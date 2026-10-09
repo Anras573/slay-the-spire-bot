@@ -1,0 +1,14 @@
+# CommunicationMod configuration.
+#
+# Copy to the location for your OS (start the game once with CommunicationMod
+# enabled to have it create the file):
+#   Windows: %LOCALAPPDATA%\ModTheSpire\CommunicationMod\config.properties
+#   Linux:   ~/.config/ModTheSpire/CommunicationMod/config.properties
+#   macOS:   ~/Library/Preferences/ModTheSpire/CommunicationMod/config.properties
+#
+# The game starts this command itself, with the game folder as the working
+# directory, so use absolute paths. Backslashes and colons must be escaped
+# in .properties files (e.g. C\:\\Users\\me\\...).
+command=/absolute/path/to/slay-the-spire-bot/.venv/bin/python -m sts_bot --character ironclad
+# Launch the bot automatically when the game starts.
+runAtGameStart=true
