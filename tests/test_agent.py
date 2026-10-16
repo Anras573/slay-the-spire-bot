@@ -33,6 +33,17 @@ def test_starts_a_run_from_the_main_menu():
     assert agent.decide(message(["start", "state"], in_game=False)) == "start defect 5"
 
 
+def test_pauses_before_starting_a_new_run_after_a_game():
+    sleeps = []
+    agent = SimpleAgent(restart_delay=2.0, sleep=sleeps.append)
+    menu = message(["start", "state"], in_game=False)
+    agent.decide(menu)
+    assert sleeps == []  # no pause when the game has just been launched
+    agent.decide(message(["proceed"], screen_type="GAME_OVER"))
+    assert agent.decide(menu) == "start ironclad 0"
+    assert sleeps == [2.0]
+
+
 def test_waits_when_not_ready():
     assert SimpleAgent().decide(message(["state"], ready=False)) is None
 
