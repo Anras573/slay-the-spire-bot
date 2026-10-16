@@ -44,8 +44,15 @@ def main(argv: list[str] | None = None) -> None:
     log.info("starting; recording to %s", recorder.path)
 
     connection.signal_ready()
+    paused = False
     try:
         for message in connection.messages():
+            if message.state and message.state.is_paused != paused:
+                paused = message.state.is_paused
+                if paused:
+                    log.warning("the settings menu is open, which pauses the game; close it")
+                else:
+                    log.info("the settings menu was closed")
             try:
                 command = agent.decide(message)
             except Exception:

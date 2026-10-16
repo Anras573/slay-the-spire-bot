@@ -13,10 +13,15 @@ Use the ``logging`` module (configured to write to a file) instead of ``print``.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, TextIO
+
+from .state import GameState
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -26,7 +31,7 @@ class Message:
     available_commands: list[str] = field(default_factory=list)
     ready_for_command: bool = False
     in_game: bool = False
-    game_state: dict[str, Any] | None = None
+    state: GameState | None = None
     error: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -36,18 +41,25 @@ class Message:
             available_commands=list(data.get("available_commands", [])),
             ready_for_command=bool(data.get("ready_for_command", False)),
             in_game=bool(data.get("in_game", False)),
-            game_state=data.get("game_state"),
+            state=_parse_state(data.get("game_state")),
             error=data.get("error"),
             raw=data,
         )
 
     @property
     def screen_type(self) -> str | None:
-        return self.game_state.get("screen_type") if self.game_state else None
+        return self.state.screen_type if self.state else None
 
-    @property
-    def in_combat(self) -> bool:
-        return bool(self.game_state and self.game_state.get("combat_state"))
+
+def _parse_state(data: dict[str, Any] | None) -> GameState | None:
+    if not data:
+        return None
+    try:
+        return GameState.from_dict(data)
+    except Exception:
+        # Keep the bot alive; the raw message is still recorded for debugging.
+        log.exception("could not parse game state")
+        return None
 
 
 class Connection:
