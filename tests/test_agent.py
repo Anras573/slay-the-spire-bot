@@ -107,3 +107,16 @@ def test_connection_reads_json_lines_and_writes_commands():
     conn.send("end")
     assert len(messages) == 1 and messages[0].ready_for_command
     assert out.getvalue() == "ready\nend\n"
+
+
+def test_recorded_fight_start_plays_first_strike_at_first_monster(load_message):
+    assert SimpleAgent().decide(load_message("combat")) == "play 1 0"
+
+
+def test_recorded_fight_skips_dead_monsters_when_targeting(load_message):
+    # Clash isn't playable here; Strike is the second card.
+    assert SimpleAgent().decide(load_message("combat_slime_boss")) == "play 2 6"
+
+
+def test_recorded_paused_game_is_left_to_the_player(load_message):
+    assert SimpleAgent().decide(load_message("paused")) == IDLE_COMMAND

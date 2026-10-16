@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
-from typing import Any
 
 from .protocol import Message
+from .state import CombatState, GameState
 
 # Commands that move the game forward without choosing anything, in the order
 # we prefer to try them.
@@ -77,42 +77,43 @@ class SimpleAgent:
         if self._repeats >= STUCK_THRESHOLD:
             return self._escape(commands)
 
-        if message.in_combat and ("play" in commands or "end" in commands):
-            return self._combat(message.game_state or {}, commands)
-        return self._screen(message, commands)
+        state = message.state
+        if state is None:
+            return self._escape(commands)
+        if state.combat and ("play" in commands or "end" in commands):
+            return self._combat(state.combat, commands)
+        return self._screen(state, commands)
 
     def _track_repeats(self, message: Message) -> None:
         key = json.dumps(message.raw, sort_keys=True)
         self._repeats = self._repeats + 1 if key == self._last_state_key else 0
         self._last_state_key = key
 
-    def _combat(self, state: dict[str, Any], commands: set[str]) -> str:
+    def _combat(self, combat: CombatState, commands: set[str]) -> str:
         if "play" in commands:
-            combat = state["combat_state"]
-            target = _first_target(combat.get("monsters", []))
-            for index, card in enumerate(combat.get("hand", [])):
-                if not card.get("is_playable"):
+            targets = combat.targetable_monsters
+            for index, card in enumerate(combat.hand):
+                if not card.is_playable:
                     continue
                 # CommunicationMod numbers hand cards from 1.
-                if card.get("has_target"):
-                    if target is not None:
-                        return f"play {index + 1} {target}"
+                if card.has_target:
+                    if targets:
+                        return f"play {index + 1} {targets[0][0]}"
                 else:
                     return f"play {index + 1}"
         if "end" in commands:
             return "end"
         return self._escape(commands)
 
-    def _screen(self, message: Message, commands: set[str]) -> str:
-        screen = message.screen_type
+    def _screen(self, state: GameState, commands: set[str]) -> str:
+        screen = state.screen_type
         if screen == "SHOP_ROOM" and "proceed" in commands:
             return "proceed"  # don't open the shop
         if screen == "SHOP_SCREEN" and "leave" in commands:
             return "leave"
         if screen in ("GRID", "HAND_SELECT") and "confirm" in commands:
             return "confirm"
-        choices = (message.game_state or {}).get("choice_list") or []
-        if "choose" in commands and choices:
+        if "choose" in commands and state.choice_list:
             return "choose 0"
         return self._escape(commands)
 
@@ -122,11 +123,3 @@ class SimpleAgent:
             return IDLE_COMMAND
         # Cycle through the options in case the first one doesn't help.
         return options[max(self._repeats - STUCK_THRESHOLD, 0) % len(options)]
-
-
-def _first_target(monsters: list[dict[str, Any]]) -> int | None:
-    for index, monster in enumerate(monsters):
-        alive = monster.get("current_hp", 0) > 0
-        if alive and not monster.get("is_gone") and not monster.get("half_dead"):
-            return index
-    return None

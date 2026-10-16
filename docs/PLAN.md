@@ -12,8 +12,9 @@ Slay the Spire ── CommunicationMod ──stdin (JSON state)──▶ sts_bot
 - **Game connection:** [CommunicationMod](https://github.com/ForgottenArbiter/CommunicationMod),
   running on ModTheSpire and BaseMod. It sends the full game state as JSON and accepts text
   commands, so we read no memory and scrape no screens.
-- **Bot:** a Python process. `protocol.py` handles the wire format, `agent.py` makes decisions
-  and `recorder.py` saves everything it sees as JSON Lines.
+- **Bot:** a Python process. `protocol.py` handles the wire format, `state.py` turns the JSON
+  into typed classes, `agent.py` makes decisions and `recorder.py` saves everything it sees as
+  JSON Lines.
 
 ### Command cheat sheet
 
@@ -37,11 +38,20 @@ Each message lists the commands that are valid right now in `available_commands`
 - A trivial agent that never gets stuck (it detects repeated states and moves on).
 - **Done when:** the bot plays complete runs unattended, losing is fine.
 
-### 2. State model
+### 2. State model ✅
 - Typed classes (dataclasses) for the player, cards, monsters, relics, potions, the map and
   each screen, parsed from the JSON.
-- Turn recorded sessions into test fixtures so decisions can be tested without the game.
+- Turn recorded sessions into test fixtures so decisions can be tested without the game
+  (`scripts/extract_fixtures.py`).
 - **Done when:** the agent no longer touches raw dicts.
+- Still untyped (no recording yet, as the bot skips them): shops, boss relic rewards, hand
+  selection, and Defect orbs. They parse as `UnknownScreen` or raw dicts until we have data.
+
+### Learned from the first recordings
+- On the first message of a fight, every monster's intent is `DEBUG` (not set yet). Real
+  intents arrive with the next state, so block decisions on turn 1 need to wait for them.
+- The settings menu (`screen_name: SETTINGS`) pauses the game. The bot can only wait it out;
+  it logs a warning when this happens.
 
 ### 3. Rule-based bot
 - **Combat:** block when the incoming damage (from monster intents) would hurt, otherwise

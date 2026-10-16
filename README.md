@@ -51,4 +51,10 @@ Logs go to `~/.sts_bot/logs` by default:
 - `session-*.jsonl`: every message received and the command sent in reply, for debugging
   and as test fixtures
 
+To turn a recording into test fixtures (one example message per screen type):
+
+```sh
+python scripts/extract_fixtures.py ~/.sts_bot/logs/session-XXXX.jsonl
+```
+
 If the bot fails to start, check `communication_mod_errors.log` in the game folder.
