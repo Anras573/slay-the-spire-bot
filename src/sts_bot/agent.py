@@ -8,6 +8,8 @@ should never get stuck. Smarter agents replace ``decide``.
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Callable
 from typing import Any
 
 from .protocol import Message
@@ -23,11 +25,25 @@ IDLE_COMMAND = "wait 30"
 # working (e.g. picking a potion with full potion slots) and try escapes.
 STUCK_THRESHOLD = 2
 
+# Starting a new run the moment the main menu appears after a game over has
+# left the game stuck mid-transition, so give the menu time to settle first.
+# The menu doesn't accept `wait`, so the bot pauses before replying instead.
+RESTART_DELAY_SECONDS = 2.0
+
 
 class SimpleAgent:
-    def __init__(self, character: str = "ironclad", ascension: int = 0) -> None:
+    def __init__(
+        self,
+        character: str = "ironclad",
+        ascension: int = 0,
+        restart_delay: float = RESTART_DELAY_SECONDS,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self.character = character
         self.ascension = ascension
+        self._restart_delay = restart_delay
+        self._sleep = sleep
+        self._was_in_game = False
         self._last_message: Message | None = None
         self._last_state_key: str | None = None
         self._repeats = 0
@@ -51,8 +67,12 @@ class SimpleAgent:
         commands = set(message.available_commands)
         if not message.in_game:
             if "start" in commands:
+                if self._was_in_game:
+                    self._sleep(self._restart_delay)
+                    self._was_in_game = False
                 return f"start {self.character} {self.ascension}"
             return IDLE_COMMAND
+        self._was_in_game = True
 
         if self._repeats >= STUCK_THRESHOLD:
             return self._escape(commands)

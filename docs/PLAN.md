@@ -20,7 +20,7 @@ Slay the Spire ── CommunicationMod ──stdin (JSON state)──▶ sts_bot
 | Command | Meaning |
 | --- | --- |
 | `start <class> [ascension] [seed]` | Start a run from the main menu |
-| `play <card> [target]` | Play a card. Hand cards are numbered from **1**, monsters from 0 |
+| `play <card> [target]` | Play a card. Hand cards are numbered from **1**, monsters from 0, and dead monsters keep their slot |
 | `end` | End the turn |
 | `potion use\|discard <slot> [target]` | Use or discard a potion |
 | `choose <index\|name>` | Pick from `choice_list` (rewards, map, events, shop, card grids) |
