@@ -53,13 +53,22 @@ Each message lists the commands that are valid right now in `available_commands`
 - The settings menu (`screen_name: SETTINGS`) pauses the game. The bot can only wait it out;
   it logs a warning when this happens.
 
-### 3. Rule-based bot
-- **Combat:** block when the incoming damage (from monster intents) would hurt, otherwise
-  maximise damage. Kill the lowest-HP enemy first. Use potions in elite and boss fights.
-- **Card rewards:** a ranked card list per character, plus deck-size awareness.
-- **Map:** score paths (elites when healthy, rest sites before bosses, shops when rich).
-- **Events, shops, rest sites:** simple heuristics.
-- **Run statistics:** log the floor reached, the cause of death and the win rate per version.
+### 3. Rule-based bot (first version in place; needs in-game runs)
+- **Combat** (`combat.py`): use potions when about to die (defensive ones first) and to open
+  elite and boss fights (saving defensive ones); kill a monster when a card can; block when
+  incoming damage beats current block; play powers; attack the weakest monster, preferring
+  area damage against groups. Damage and block follow strength, weak, vulnerable, dexterity
+  and frail. Card numbers come from `cards.py`, which covers most Ironclad cards.
+- **Card rewards** (`cards.py`, `choices.py`): a score per Ironclad card; take the best if it
+  clears a bar that rises once the deck has 20 cards, otherwise skip.
+- **Map** (`pathing.py`): score every path to the top; elites only when healthy, rest sites
+  when hurt.
+- **Rest sites, upgrades, removals** (`choices.py`): rest below half HP (or below 80% before
+  the boss), otherwise upgrade; upgrade Bash first; remove curses, then Strikes.
+- **Run statistics** (`stats.py`): one line per run in `runs.jsonl`;
+  `python -m sts_bot.stats` prints win rate, act 1 clear rate, floors and the deadliest fights.
+- Not covered yet: shops (skipped), events (first option), boss relics (first option), card
+  draw and exhaust synergies, and characters other than Ironclad.
 - **Done when:** it reliably beats Act 1 with Ironclad at Ascension 0.
 
 ### 4. Combat search

@@ -1,7 +1,9 @@
+"""How the agent turns messages into commands: plumbing, fallbacks and routing."""
+
 import io
 import json
 
-from sts_bot.agent import IDLE_COMMAND, SimpleAgent
+from sts_bot.agent import IDLE_COMMAND, INTENT_WAIT_COMMAND, INTENT_WAITS, Agent
 from sts_bot.protocol import Connection, Message
 
 
@@ -12,30 +14,38 @@ def message(commands, in_game=True, ready=True, **state):
     return Message.from_dict(data)
 
 
-def card(playable=True, target=False):
-    return {"name": "Strike", "is_playable": playable, "has_target": target}
+def strike():
+    return {"id": "Strike_R", "name": "Strike", "type": "ATTACK", "cost": 1,
+            "is_playable": True, "has_target": True}  # fmt: skip
 
 
-def monster(hp=10, gone=False):
-    return {"name": "Cultist", "current_hp": hp, "is_gone": gone, "half_dead": False}
-
-
-def combat(hand, monsters, commands=("play", "end")):
+def fight(monsters, hand=None, commands=("play", "end", "wait")):
     return message(
         list(commands),
         screen_type="NONE",
-        combat_state={"hand": hand, "monsters": monsters},
+        floor=3,
+        combat_state={
+            "hand": hand if hand is not None else [strike()],
+            "monsters": monsters,
+            "player": {"current_hp": 50, "max_hp": 80, "energy": 3},
+            "turn": 1,
+        },
     )
 
 
+def cultist(intent="ATTACK", hp=40):
+    return {"name": "Cultist", "current_hp": hp, "intent": intent,
+            "move_adjusted_damage": 6, "move_hits": 1}  # fmt: skip
+
+
 def test_starts_a_run_from_the_main_menu():
-    agent = SimpleAgent(character="defect", ascension=5)
+    agent = Agent(character="defect", ascension=5)
     assert agent.decide(message(["start", "state"], in_game=False)) == "start defect 5"
 
 
 def test_pauses_before_starting_a_new_run_after_a_game():
     sleeps = []
-    agent = SimpleAgent(restart_delay=2.0, sleep=sleeps.append)
+    agent = Agent(restart_delay=2.0, sleep=sleeps.append)
     menu = message(["start", "state"], in_game=False)
     agent.decide(menu)
     assert sleeps == []  # no pause when the game has just been launched
@@ -45,49 +55,59 @@ def test_pauses_before_starting_a_new_run_after_a_game():
 
 
 def test_waits_when_not_ready():
-    assert SimpleAgent().decide(message(["state"], ready=False)) is None
+    assert Agent().decide(message(["state"], ready=False)) is None
 
 
-def test_plays_first_playable_card_with_one_based_index():
-    msg = combat([card(playable=False), card()], [monster()])
-    assert SimpleAgent().decide(msg) == "play 2"
-
-
-def test_targets_first_living_monster():
-    msg = combat([card(target=True)], [monster(gone=True), monster(hp=0), monster()])
-    assert SimpleAgent().decide(msg) == "play 1 2"
+def test_plays_cards_with_one_based_index():
+    unplayable = {**strike(), "is_playable": False}
+    assert Agent().decide(fight([cultist()], hand=[unplayable, strike()])) == "play 2 0"
 
 
 def test_ends_turn_when_nothing_playable():
-    msg = combat([card(playable=False)], [monster()])
-    assert SimpleAgent().decide(msg) == "end"
+    assert Agent().decide(fight([cultist()], hand=[])) == "end"
 
 
-def test_picks_first_choice_on_screens():
-    msg = message(["choose", "skip"], screen_type="CARD_REWARD", choice_list=["bash", "anger"])
-    assert SimpleAgent().decide(msg) == "choose 0"
+def test_waits_for_intents_then_plays_anyway():
+    agent = Agent()
+    blind = fight([cultist(intent="DEBUG")])
+    for _ in range(INTENT_WAITS):
+        assert agent.decide(blind) == INTENT_WAIT_COMMAND
+    assert agent.decide(blind) == "play 1 0"
+
+
+def test_ends_turn_when_a_play_does_not_change_the_state():
+    agent = Agent()
+    stuck = fight([cultist()])
+    assert agent.decide(stuck) == "play 1 0"
+    assert agent.decide(stuck) == "play 1 0"
+    assert agent.decide(stuck) == "end"
 
 
 def test_skips_the_shop():
     msg = message(["choose", "proceed"], screen_type="SHOP_ROOM", choice_list=["shop"])
-    assert SimpleAgent().decide(msg) == "proceed"
+    assert Agent().decide(msg) == "proceed"
+
+
+def test_takes_first_option_on_screens_without_rules():
+    msg = message(["choose"], screen_type="EVENT", choice_list=["talk"])
+    assert Agent().decide(msg) == "choose 0"
 
 
 def test_proceeds_when_nothing_to_choose():
     msg = message(["proceed"], screen_type="COMBAT_REWARD", choice_list=[])
-    assert SimpleAgent().decide(msg) == "proceed"
+    assert Agent().decide(msg) == "proceed"
 
 
 def test_escapes_when_the_same_state_repeats():
-    agent = SimpleAgent()
-    msg = message(["choose", "proceed"], screen_type="COMBAT_REWARD", choice_list=["potion"])
+    agent = Agent()
+    msg = message(["choose", "proceed"], screen_type="EVENT", choice_list=["a"])
     assert agent.decide(msg) == "choose 0"
     assert agent.decide(msg) == "choose 0"
     assert agent.decide(msg) == "proceed"
 
 
 def test_error_replies_reuse_last_state():
-    agent = SimpleAgent()
+    agent = Agent()
     agent.decide(message(["choose", "proceed"], screen_type="EVENT", choice_list=["a"]))
     error = Message.from_dict({"error": "Invalid command", "ready_for_command": True})
     agent.decide(error)
@@ -95,7 +115,39 @@ def test_error_replies_reuse_last_state():
 
 
 def test_idles_when_no_command_applies():
-    assert SimpleAgent().decide(message(["state", "wait"], screen_type="NONE")) == IDLE_COMMAND
+    assert Agent().decide(message(["state", "wait"], screen_type="NONE")) == IDLE_COMMAND
+
+
+def test_declined_card_reward_is_not_reopened(load_message):
+    agent = Agent()
+    weak_cards = load_message("card_reward")  # True Grit, Bloodletting, Flex
+    rewards = message(
+        ["choose", "proceed"],
+        screen_type="COMBAT_REWARD",
+        floor=weak_cards.state.floor,
+        choice_list=["card"],
+        screen_state={"rewards": [{"reward_type": "CARD"}]},
+    )
+    assert agent.decide(rewards) == "choose 0"
+    # True Grit scores 55, enough for a starter deck; make the deck large.
+    big_deck = {**weak_cards.raw}
+    big_deck["game_state"] = {**big_deck["game_state"], "deck": [strike()] * 25}
+    assert agent.decide(Message.from_dict(big_deck)) == "skip"
+    assert agent.decide(rewards) == "proceed"
+
+
+def test_recorded_fight_waits_for_intents(load_message):
+    # The first message of a fight has no intents yet.
+    assert Agent().decide(load_message("combat")) == INTENT_WAIT_COMMAND
+
+
+def test_recorded_boss_fight_drinks_block_potion_when_about_to_die(load_message):
+    # 4 HP against 7 incoming damage, holding a Block Potion in slot 0.
+    assert Agent().decide(load_message("combat_slime_boss")) == "potion use 0"
+
+
+def test_recorded_paused_game_is_left_to_the_player(load_message):
+    assert Agent().decide(load_message("paused")) == IDLE_COMMAND
 
 
 def test_connection_reads_json_lines_and_writes_commands():
@@ -107,16 +159,3 @@ def test_connection_reads_json_lines_and_writes_commands():
     conn.send("end")
     assert len(messages) == 1 and messages[0].ready_for_command
     assert out.getvalue() == "ready\nend\n"
-
-
-def test_recorded_fight_start_plays_first_strike_at_first_monster(load_message):
-    assert SimpleAgent().decide(load_message("combat")) == "play 1 0"
-
-
-def test_recorded_fight_skips_dead_monsters_when_targeting(load_message):
-    # Clash isn't playable here; Strike is the second card.
-    assert SimpleAgent().decide(load_message("combat_slime_boss")) == "play 2 6"
-
-
-def test_recorded_paused_game_is_left_to_the_player(load_message):
-    assert SimpleAgent().decide(load_message("paused")) == IDLE_COMMAND

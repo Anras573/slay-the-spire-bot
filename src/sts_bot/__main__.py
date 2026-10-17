@@ -6,9 +6,10 @@ import argparse
 import logging
 from pathlib import Path
 
-from .agent import IDLE_COMMAND, SimpleAgent
+from .agent import IDLE_COMMAND, Agent
 from .protocol import Connection
 from .recorder import Recorder
+from .stats import RunLog
 
 log = logging.getLogger("sts_bot")
 
@@ -39,8 +40,9 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     connection = Connection()
-    agent = SimpleAgent(character=args.character, ascension=args.ascension)
+    agent = Agent(character=args.character, ascension=args.ascension)
     recorder = Recorder(args.log_dir)
+    runs = RunLog(args.log_dir / "runs.jsonl")
     log.info("starting; recording to %s", recorder.path)
 
     connection.signal_ready()
@@ -53,6 +55,9 @@ def main(argv: list[str] | None = None) -> None:
                     log.warning("the settings menu is open, which pauses the game; close it")
                 else:
                     log.info("the settings menu was closed")
+            summary = runs.observe(message.state)
+            if summary:
+                log.info("run over: %s", summary)
             try:
                 command = agent.decide(message)
             except Exception:

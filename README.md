@@ -3,9 +3,10 @@
 A bot that plays Slay the Spire (the first game), written in Python. It talks to the
 game through [CommunicationMod](https://github.com/ForgottenArbiter/CommunicationMod).
 
-The current bot is a placeholder: it plays the first playable card, takes the first
-option on every screen and records everything it sees. It exists to prove the
-connection works. See [docs/PLAN.md](docs/PLAN.md) for the roadmap.
+The bot follows hand-written rules for Ironclad: it blocks when monsters will hit,
+attacks the weakest monster, uses potions when in danger, picks card rewards from a
+ranked list and plans its route on the map. See [docs/PLAN.md](docs/PLAN.md) for
+the rules and the roadmap.
 
 ## How it works
 
@@ -50,6 +51,7 @@ Logs go to `~/.sts_bot/logs` by default:
 - `bot.log`: what the bot decided and why it failed, if it did
 - `session-*.jsonl`: every message received and the command sent in reply, for debugging
   and as test fixtures
+- `runs.jsonl`: one line per finished run. `python -m sts_bot.stats` summarises it
 
 To turn a recording into test fixtures (one example message per screen type):
 
